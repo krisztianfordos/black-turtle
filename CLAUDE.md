@@ -59,6 +59,12 @@ Copy rules: site content is Hungarian; explanations in the brand book are plain 
 
 The facade screenshot has a video play button baked in. Ask for a clean shopfront photo before using it prominently.
 
+## Context & prototypes
+
+- `context/`: one file per topic (identity, location, hours, services with full descriptions, team, booking policy, reviews, the Saint Urbain structural reference, not-found, the interior photo analysis, the train-journey technique reference) plus **`context/plans.md`** (decisions, hero versions, open owner questions). Start at `context/README.md`.
+- `prototypes/interior-pushin/`: a code-drawn (Canvas 2D, no libraries) slow push-in into the salon, used for hero version B and inside the arch for A2. A visual prototype, not website code.
+- Brand Book hero versions, stacked at the top: **A1** shopfront with the real photo in the arch · **A2** shopfront with the drawn interior in the arch · **B** full-bleed drawn interior. Hero and footer use the arch portal with vertical jambs (`textures/arch-portal-*.svg`), the barber pole (`textures/barber-pole.svg`), the enamel street sign (EB Garamond + Inter Tight 600) and black plaques aligned to the stone courses (text never crosses a groove).
+
 ## Planned site sections (content to gather; no build yet)
 
 1. **Rólunk** (About)

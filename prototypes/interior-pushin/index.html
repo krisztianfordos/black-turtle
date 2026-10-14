@@ -1,0 +1,652 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Black Turtle: interior push-in (prototype)</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  html, body { margin: 0; padding: 0; background: #1A1918; overflow: hidden; }
+  canvas { display: block; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<script>
+(() => {
+'use strict';
+
+/* ---------- parameters ---------- */
+const Q = new URLSearchParams(location.search);
+const W = Math.max(1, +Q.get('w') || 1440);
+const H = Math.max(1, +Q.get('h') || 820);
+const FROZEN_T = Q.has('t') ? +Q.get('t') : null;
+const DUR = 16;                       // seconds of dolly
+const DPR = window.devicePixelRatio || 1;
+
+const cv = document.getElementById('c');
+cv.width = Math.round(W * DPR); cv.height = Math.round(H * DPR);
+cv.style.width = W + 'px'; cv.style.height = H + 'px';
+const mainCtx = cv.getContext('2d');
+const tmp = document.createElement('canvas');   // offscreen layer for reflections
+tmp.width = cv.width; tmp.height = cv.height;
+const tmpCtx = tmp.getContext('2d');
+let g = mainCtx;                      // current drawing target
+
+/* ---------- deterministic randomness ---------- */
+function mulberry32(a) {
+  return () => { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; };
+}
+function hash(a, b = 0, c = 0) {
+  let h = (a * 374761393 + b * 668265263 + c * 1274126177) | 0;
+  h = Math.imul(h ^ h >>> 13, 1274126177); h ^= h >>> 16; return (h >>> 0) / 4294967296;
+}
+
+/* ---------- small math ---------- */
+const add = (a, b) => [a[0] + b[0], a[1] + b[1], a[2] + b[2]];
+const sub = (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
+const mul = (a, k) => [a[0] * k, a[1] * k, a[2] * k];
+const dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+const cross = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+const len = a => Math.hypot(a[0], a[1], a[2]);
+const norm = a => { const l = len(a) || 1; return [a[0] / l, a[1] / l, a[2] / l]; };
+const lerp = (a, b, k) => a + (b - a) * k;
+const lerpV = (a, b, k) => [lerp(a[0], b[0], k), lerp(a[1], b[1], k), lerp(a[2], b[2], k)];
+const clamp = (x, a = 0, b = 1) => Math.min(b, Math.max(a, x));
+const smooth = x => { x = clamp(x); return x * x * (3 - 2 * x); };
+const centroid = pts => mul(pts.reduce(add, [0, 0, 0]), 1 / pts.length);
+
+/* ---------- colour ---------- */
+const hex = h => [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16)];
+const mix = (a, b, k) => [lerp(a[0], b[0], k), lerp(a[1], b[1], k), lerp(a[2], b[2], k)];
+const rgb = (c, a = 1) => `rgba(${c[0] | 0},${c[1] | 0},${c[2] | 0},${a})`;
+const C = {
+  oxford: hex('#1A1918'), offwhite: hex('#E8E8E8'), sandstone: hex('#D4C3B3'),
+  leather: hex('#1A140F'), sheen: hex('#424038'), walnut: hex('#351A12'),
+  mahogany: hex('#7E412A'), cognac: hex('#B07656'), chrome: hex('#ACAAAA'),
+  wall: hex('#d3cac0'), wallDark: hex('#b9afa4'),
+  leafDeep: hex('#143107'), leafMid: hex('#2f5b0b'), leafBright: hex('#4b800e'),
+};
+
+/* ---------- camera ---------- */
+const NEAR = 0.08;
+const BACK_Z = 4.4, WALL_L = -3.6, WALL_R = 4.2, CEIL = 3.3;
+const E0 = [1.0, 1.35, -3.0], T0 = [0.15, 1.1, 3.0];     // start eye / look-at
+const E1 = [0.45, 1.3, -0.5], T1 = [0.4, 1.05, 4.0];    // end eye / look-at
+const F0 = 1250;                                         // focal length in px at 1440x820
+
+// distance eased by the integral of a smoothstep speed profile (soft start, soft stop)
+const EASE = (() => {
+  const N = 2000, tab = new Float64Array(N + 1);
+  for (let i = 1; i <= N; i++) {
+    const u = (i - 0.5) / N;
+    tab[i] = tab[i - 1] + smooth(u / 0.4) * smooth((1 - u) / 0.4);
+  }
+  for (let i = 0; i <= N; i++) tab[i] /= tab[N];
+  return u => { u = clamp(u); const x = u * N, i = Math.min(N - 1, x | 0); return lerp(tab[i], tab[i + 1], x - i); };
+})();
+
+function makeCamera(t) {
+  const e = EASE(t / DUR);
+  const eye = lerpV(E0, E1, e), tgt = lerpV(T0, T1, e);
+  // gimbal drift: lateral sway plus tiny yaw / pitch / roll wobble
+  eye[0] += 0.05 * Math.sin(t * 0.55) + 0.02 * Math.sin(t * 1.3 + 1);
+  eye[1] += 0.012 * Math.sin(t * 0.9 + 2);
+  const yaw = 0.004 * Math.sin(t * 0.7) + 0.002 * Math.sin(t * 1.9 + 1);
+  const pitch = 0.003 * Math.sin(t * 0.8 + 3);
+  const roll = 0.005 * Math.sin(t * 0.5 + 1);
+  let f = norm(sub(tgt, eye));
+  const cy = Math.cos(yaw), sy = Math.sin(yaw);
+  f = norm([f[0] * cy + f[2] * sy, f[1] + pitch, -f[0] * sy + f[2] * cy]);
+  let r = norm(cross([0, 1, 0], f)), u = cross(f, r);
+  const cr = Math.cos(roll), sr = Math.sin(roll);
+  [r, u] = [add(mul(r, cr), mul(u, sr)), sub(mul(u, cr), mul(r, sr))];
+  // cover-style framing: same camera, scale by whichever axis needs it
+  const s = W / H >= 1.2 ? Math.max(W / 1440, H / 820) : W / 1440 * 1.4;   // portrait: pull back so both chairs stay in frame
+  return { eye, f, r, u, F: F0 * s, cx: W / 2, cy: W / H >= 1.2 ? H / 2 : H * 0.47 };
+}
+let cam;
+const toCam = p => { const d = sub(p, cam.eye); return [dot(d, cam.r), dot(d, cam.u), dot(d, cam.f)]; };
+const scr = c => [cam.cx + cam.F * c[0] / c[2], cam.cy - cam.F * c[1] / c[2]];
+const projPoint = p => { const c = toCam(p); return c[2] > NEAR ? scr(c) : null; };
+
+// transform world points to camera space, clip against the near plane, project
+function projPoly(world, R) {
+  const cp = world.map(p => toCam(R ? R(p) : p)), out = [];
+  for (let i = 0; i < cp.length; i++) {
+    const a = cp[i], b = cp[(i + 1) % cp.length], ia = a[2] > NEAR, ib = b[2] > NEAR;
+    if (ia) out.push(a);
+    if (ia !== ib) { const k = (NEAR - a[2]) / (b[2] - a[2]); out.push([lerp(a[0], b[0], k), lerp(a[1], b[1], k), NEAR]); }
+  }
+  return out.length < 3 ? null : out.map(scr);
+}
+function pathS(s) { g.beginPath(); g.moveTo(s[0][0], s[0][1]); for (let i = 1; i < s.length; i++) g.lineTo(s[i][0], s[i][1]); g.closePath(); }
+function fillWorld(world, style, R) { const s = projPoly(world, R); if (!s) return null; pathS(s); g.fillStyle = style; g.fill(); return s; }
+
+/* ---------- lighting ---------- */
+const LIGHT = norm([-0.5, 0.75, -0.55]);       // from front-left, above
+function shadeFace(f, V) {
+  const v = norm(V), n = f.n, ndl = Math.max(0, dot(n, LIGHT));
+  const h = norm(add(LIGHT, v)), sp = Math.pow(Math.max(0, dot(n, h)), 22);
+  if (f.mat === 'leather') {
+    const k = clamp(0.1 + 0.55 * ndl + 0.7 * sp, 0, 1);
+    return mix(f.col, C.sheen, k);
+  }
+  if (f.mat === 'chrome') {
+    const d = dot(v, n), rx = 2 * d * n[0] - v[0], ry = 2 * d * n[1] - v[1], rz = 2 * d * n[2] - v[2];
+    let k = 0.45 + 0.42 * Math.sin(rx * 3.4 + rz * 2.1 + 0.4) + 0.35 * ry + 0.2 * ndl;
+    let c = mix(hex('#242427'), hex('#f1f4f7'), smooth(k));
+    if (ry < 0) c = mix(c, C.cognac, clamp(-ry * 0.55));      // floor tint
+    return c;
+  }
+  const k = 0.5 + 0.55 * ndl;                    // matte
+  return [clamp(f.col[0] * k, 0, 255), clamp(f.col[1] * k, 0, 255), clamp(f.col[2] * k, 0, 255)];
+}
+
+/* ---------- solids (built once, in world space) ---------- */
+function mkFace(pts, centre, mat, col, tuft) {
+  const c = centroid(pts);
+  let n = norm(cross(sub(pts[1], pts[0]), sub(pts[2], pts[0])));
+  if (dot(n, sub(c, centre)) < 0) n = mul(n, -1);
+  return { pts, c, n, mat, col, tuft };
+}
+// P maps local to world. Optional shear moves the top of the box in z (reclined backrest).
+function box(P, x0, x1, y0, y1, z0, z1, mat, col, o = {}) {
+  const sh = o.shear || 0, tf = o.tuft || {};
+  const k = (x, y, z) => P(x, y, z + sh * (y - y0));
+  const centre = centroid([k(x0, y0, z0), k(x1, y1, z1)]);
+  const F = (pts, name) => mkFace(pts, centre, mat, col, tf[name]);
+  return { c: centre, faces: [
+    F([k(x0, y1, z0), k(x1, y1, z0), k(x1, y1, z1), k(x0, y1, z1)], 'top'),
+    F([k(x0, y0, z1), k(x1, y0, z1), k(x1, y1, z1), k(x0, y1, z1)], 'front'),
+    F([k(x0, y0, z0), k(x1, y0, z0), k(x1, y1, z0), k(x0, y1, z0)], 'back'),
+    F([k(x0, y0, z0), k(x0, y0, z1), k(x0, y1, z1), k(x0, y1, z0)], 'left'),
+    F([k(x1, y0, z0), k(x1, y0, z1), k(x1, y1, z1), k(x1, y1, z0)], 'right'),
+  ] };
+}
+function prism(P, cx, cz, r, y0, y1, mat, col, segs = 20, rTop = r) {
+  const ring = (rad, y) => Array.from({ length: segs }, (_, i) => { const a = i / segs * Math.PI * 2; return P(cx + Math.cos(a) * rad, y, cz + Math.sin(a) * rad); });
+  const b = ring(r, y0), t = ring(rTop, y1), centre = P(cx, (y0 + y1) / 2, cz);
+  const faces = [mkFace(t, centre, mat, col)];
+  for (let i = 0; i < segs; i++) { const j = (i + 1) % segs; faces.push(mkFace([b[i], b[j], t[j], t[i]], centre, mat, col)); }
+  return { c: centre, faces };
+}
+function bottle(P, x, y, z, r, h, col, capCol, band) {
+  const out = [prism(P, x, z, r, y, y + h * 0.7, 'dark', col, 12),
+    prism(P, x, z, r * 0.45, y + h * 0.7, y + h * 0.93, 'dark', col, 10),
+    prism(P, x, z, r * 0.5, y + h * 0.93, y + h, 'dark', capCol, 10)];
+  if (band) out.push(prism(P, x, z, r * 1.03, y + h * 0.18, y + h * 0.5, 'matte', band, 12));
+  return out;
+}
+
+/* leaf outline in world space; lobed gives monstera-style cut edges */
+function leaf(b, d, facing, Wd, Ln, o = {}) {
+  d = norm(d);
+  const s = norm(cross(d, facing)), n = norm(cross(s, d)), N = 36, L = [], Rr = [];
+  for (let i = 0; i <= N; i++) {
+    const t = i / N;
+    const w = Wd * Math.pow(Math.sin(Math.PI * Math.pow(t, o.lobed ? 0.7 : 0.85)), 0.85) *
+      (o.lobed ? 0.5 + 0.5 * Math.pow(Math.abs(Math.cos(Math.PI * 4.5 * t)), 0.6) : 1);
+    const c = add(b, mul(d, Ln * t));
+    L.push(add(c, mul(s, w))); Rr.push(sub(c, mul(s, w)));
+  }
+  return { pts: L.concat(Rr.reverse()), n, c: add(b, mul(d, Ln * 0.5)), mid: [b, add(b, mul(d, Ln * 0.95))], dark: o.dark || 0, lobed: !!o.lobed };
+}
+
+/* ---------- scene ---------- */
+const scene = { objects: [], mirrors: [], planks: [] };
+
+function buildChair(px, pz, yaw) {
+  const c = Math.cos(yaw), s = Math.sin(yaw);
+  const P = (x, y, z) => [px + x * c + z * s, y, pz + x * s - z * c];
+  const L = C.leather, ch = C.chrome, S = [];
+  S.push(prism(P, 0, 0, 0.40, 0, 0.06, 'chrome', ch, 28));
+  S.push(prism(P, 0, 0, 0.30, 0.06, 0.07, 'leather', L, 28));
+  S.push(prism(P, 0, 0, 0.14, 0.07, 0.12, 'chrome', ch, 20));
+  S.push(prism(P, 0, 0, 0.07, 0.12, 0.46, 'chrome', ch, 16));
+  // footrest and calf rest
+  S.push(box(P, -0.22, 0.22, 0.10, 0.125, 0.30, 0.86, 'chrome', ch));
+  S.push(box(P, -0.19, 0.19, 0.125, 0.18, 0.46, 0.82, 'leather', L, { shear: 0, tuft: {} }));
+  S.push(box(P, -0.23, 0.23, 0.20, 0.46, 0.34, 0.40, 'chrome', ch));
+  S.push(box(P, -0.21, 0.21, 0.22, 0.44, 0.40, 0.51, 'leather', L));
+  // seat pan, cushion
+  S.push(box(P, -0.38, 0.38, 0.40, 0.58, -0.30, 0.36, 'chrome', ch));
+  S.push(box(P, -0.33, 0.33, 0.56, 0.71, -0.28, 0.42, 'leather', L, { tuft: { top: { cols: 3, rows: 3 } } }));
+  // backrest and headrest
+  S.push(box(P, -0.31, 0.31, 0.71, 1.32, -0.40, -0.25, 'leather', L, { shear: -0.30, tuft: { front: { cols: 3, rows: 5 } } }));
+  S.push(box(P, -0.04, 0.04, 1.28, 1.40, -0.50, -0.46, 'chrome', ch));
+  S.push(box(P, -0.15, 0.15, 1.36, 1.53, -0.55, -0.41, 'leather', L, { shear: -0.2 }));
+  // arms: chrome post, leather pad, chrome end caps
+  for (const sx of [-1, 1]) {
+    const x = sx * 0.40;
+    S.push(box(P, x - 0.025, x + 0.025, 0.58, 0.80, -0.10, -0.04, 'chrome', ch));
+    S.push(box(P, x - 0.05, x + 0.05, 0.80, 0.87, -0.26, 0.20, 'leather', L));
+    S.push(box(P, x - 0.055, x + 0.055, 0.78, 0.89, 0.20, 0.27, 'chrome', ch));
+    S.push(box(P, x - 0.055, x + 0.055, 0.78, 0.89, -0.31, -0.26, 'chrome', ch));
+  }
+  scene.objects.push({ solids: S, anchor: P(0, 0.7, 0), reflect: true, shadow: { x: px, z: pz, rx: 0.6, rz: 0.55, a: 0.42 } });
+}
+
+function buildTrolley(px, pz) {
+  const P = (x, y, z) => [px + x, y, pz + z], K = C.oxford, S = [];
+  for (const [x, z] of [[-0.27, -0.17], [0.27, -0.17], [-0.27, 0.17], [0.27, 0.17]]) {
+    S.push(box(P, x - 0.012, x + 0.012, 0.06, 1.0, z - 0.012, z + 0.012, 'dark', K));
+    S.push(prism(P, x, z, 0.03, 0.0, 0.06, 'dark', K, 10));
+  }
+  for (const y of [0.12, 0.52, 0.92]) {
+    S.push(box(P, -0.30, 0.30, y, y + 0.025, -0.20, 0.20, 'dark', K));
+    S.push(box(P, -0.30, 0.30, y + 0.025, y + 0.06, 0.18, 0.20, 'dark', K));
+  }
+  const cols = [[hex('#0d0d0d'), hex('#2a2a2a'), hex('#e8e8e8')], [hex('#8a4a1e'), hex('#111'), null], [hex('#e8e8e8'), hex('#111'), hex('#1a1918')], [hex('#c9c2b6'), hex('#111'), null]];
+  const rng = mulberry32(11);
+  for (let i = 0; i < 6; i++) {
+    const [b, cap, band] = cols[(rng() * cols.length) | 0], x = -0.22 + i * 0.09;
+    S.push(...bottle(P, x, 0.945, -0.05 + (i % 2) * 0.1, 0.032, 0.13 + rng() * 0.08, b, cap, band));
+  }
+  for (let i = 0; i < 4; i++) {
+    const [b, cap, band] = cols[(rng() * cols.length) | 0];
+    S.push(...bottle(P, -0.2 + i * 0.13, 0.545, 0.0 + (i % 2) * 0.06, 0.03, 0.12 + rng() * 0.06, b, cap, band));
+  }
+  S.push(box(P, -0.18, -0.05, 0.145, 0.19, -0.1, 0.08, 'matte', C.sandstone));
+  scene.objects.push({ solids: S, anchor: P(0, 0.5, 0), reflect: true, shadow: { x: px, z: pz, rx: 0.42, rz: 0.3, a: 0.35 } });
+}
+
+function buildMonstera(px, pz) {
+  const P = (x, y, z) => [px + x, y, pz + z], S = [];
+  S.push(prism(P, 0, 0, 0.2, 0, 0.46, 'matte', C.offwhite, 24, 0.23));
+  S.push(prism(P, 0, 0, 0.17, 0.46, 0.47, 'matte', C.walnut, 24));
+  const rng = mulberry32(7), leaves = [], lines = [];
+  const n = 8;
+  for (let i = 0; i < n; i++) {
+    const a = (i / n) * Math.PI * 2 + rng() * 0.5, out = 0.12 + rng() * 0.3, hgt = 0.95 + rng() * 0.95;
+    const base = P(Math.cos(a) * 0.05, 0.47, Math.sin(a) * 0.05);
+    const tip = P(Math.cos(a) * out, hgt, Math.sin(a) * out - 0.05);
+    lines.push({ a: base, b: tip, r: 0.008, col: C.leafMid });
+    const dir = norm([Math.cos(a) * 0.9 + (rng() - 0.5) * 0.4, 0.55 + rng() * 0.35, -0.55 + Math.sin(a) * 0.35]);
+    leaves.push(leaf(tip, dir, [0, 0.4, -1], 0.17 + rng() * 0.05, 0.5 + rng() * 0.2, { lobed: i % 3 !== 0, dark: rng() * 0.3 }));
+  }
+  scene.objects.push({ solids: S, leaves, lines, anchor: P(0, 0.7, 0), reflect: true, shadow: { x: px, z: pz, rx: 0.34, rz: 0.3, a: 0.3 } });
+}
+
+function buildShelf(x0, x1, y, withPlant, seed) {
+  const P = (x, yy, z) => [x, yy, BACK_Z - z], S = [], leaves = [], lines = [];
+  S.push(box(P, x0, x1, y, y + 0.03, 0, 0.22, 'matte', hex('#6a3a26')));
+  const rng = mulberry32(seed), cols = [[hex('#111'), hex('#333')], [hex('#8a4a1e'), hex('#111')], [hex('#e8e8e8'), hex('#222')]];
+  let x = x1 - 0.06;
+  for (let i = 0; i < (withPlant ? 2 : 3); i++) {
+    const [b, cap] = cols[(rng() * 3) | 0];
+    S.push(...bottle(P, x, y + 0.03, 0.1, 0.028, 0.13 + rng() * 0.08, b, cap, i === 1 ? C.offwhite : null));
+    x -= 0.08;
+  }
+  if (withPlant) {                      // potted trailing plant
+    const px = x0 + 0.17;
+    S.push(prism(P, px, 0.1, 0.07, y + 0.03, y + 0.17, 'matte', C.offwhite, 16, 0.085));
+    for (let i = 0; i < 7; i++) {       // strands of small leaves hanging down
+      const sx = px + (rng() - 0.5) * 0.12, drop = 0.35 + rng() * 0.75;
+      const steps = Math.round(drop / 0.07);
+      lines.push({ a: P(sx, y + 0.17, 0.12), b: P(sx + (rng() - 0.5) * 0.08, y + 0.17 - drop, 0.14), r: 0.003, col: C.leafMid });
+      for (let k = 0; k < steps; k++) {
+        const yy = y + 0.14 - k * 0.07, sd = (k % 2 ? 1 : -1);
+        leaves.push(leaf(P(sx + sd * 0.01, yy, 0.13 + rng() * 0.05), [sd * 0.8, -0.35, 0.1], [0, 0, -1], 0.026, 0.07, { dark: rng() * 0.35 }));
+      }
+    }
+    for (let i = 0; i < 6; i++) leaves.push(leaf(P(px, y + 0.17, 0.1), [(rng() - 0.5) * 1.2, 0.8, -0.2], [0, 0, -1], 0.03, 0.09, { dark: rng() * 0.3 }));
+  }
+  scene.objects.push({ solids: S, leaves, lines, anchor: P((x0 + x1) / 2, y, 0.1), reflect: false });
+}
+
+function buildMirror(x0, x1, y0, y1, o = {}) {
+  const fr = 0.035;
+  scene.mirrors.push({
+    x0, x1, y0, y1, fr, z: BACK_Z - 0.02, door: !!o.door,
+    glass: [[x0, y0, BACK_Z - 0.02], [x1, y0, BACK_Z - 0.02], [x1, y1, BACK_Z - 0.02], [x0, y1, BACK_Z - 0.02]],
+  });
+}
+
+function buildFloor() {
+  const PWD = 0.095, n = 4, m = 2 * n, k = PWD * Math.SQRT1_2, out = [];
+  const X0 = WALL_L - 0.4, X1 = WALL_R + 0.4, Z0 = -3.4, Z1 = BACK_Z + 0.4;
+  const toW = (u, v) => [(u - v) * k, 0, (u + v) * k];
+  const R = 140;
+  const push = (u0, v0, u1, v1, i, j) => {
+    const p = [toW(u0, v0), toW(u1, v0), toW(u1, v1), toW(u0, v1)], c = toW((u0 + u1) / 2, (v0 + v1) / 2);
+    if (c[0] < X0 || c[0] > X1 || c[2] < Z0 || c[2] > Z1) return;
+    const h1 = hash(i, j, 1), h2 = hash(i, j, 2), h3 = hash(i, j, 3);
+    let col = mix(C.mahogany, C.cognac, Math.pow(h1, 1.6) * 0.95);
+    col = mix(col, C.walnut, h2 < 0.22 ? 0.35 + h2 * 1.2 : 0);
+    const bright = 0.9 + h3 * 0.2;
+    col = col.map(v => clamp(v * bright, 0, 255));
+    out.push({ p, c, col, along: u1 - u0 > v1 - v0 ? 'u' : 'v', h: h3 });
+  };
+  for (let y = -R; y < R; y++) for (let x = -R; x < R; x++) {
+    if ((((x - y) % m) + m) % m === 0) push(x, y, x + n, y + 1, x, y);          // horizontal planks
+    if ((((y - x - 1) % m) + m) % m === 0) push(x, y, x + 1, y + n, x, y);      // vertical planks
+  }
+  scene.planks = out;
+}
+
+scene.floorPoly = [[WALL_L, 0, -3.4], [WALL_R, 0, -3.4], [WALL_R, 0, BACK_Z], [WALL_L, 0, BACK_Z]];
+
+buildFloor();
+buildMirror(-2.5, -1.2, 0.12, 2.55, { door: true });
+buildMirror(0.5, 1.45, 0.12, 2.15);
+buildShelf(-1.0, -0.2, 2.05, true, 3);
+buildShelf(-0.55, -0.05, 1.58, false, 5);
+buildTrolley(-2.3, 0.95);
+buildChair(-0.75, 1.55, 0.3);
+buildChair(1.5, 2.9, -0.22);
+buildMonstera(2.4, 3.6);
+
+/* ---------- drawing primitives ---------- */
+function drawFace(f, R, eyeE) {
+  const V = sub(eyeE, f.c);
+  if (dot(f.n, V) <= 0) return;
+  const s = projPoly(f.pts, R);
+  if (!s) return;
+  const col = rgb(shadeFace(f, V));
+  pathS(s); g.fillStyle = col; g.fill();
+  g.strokeStyle = col; g.lineWidth = 0.6; g.stroke();     // closes AA seams between faces
+  if (f.tuft) tuft(f, R, s);
+}
+
+// diamond button-tufting on a quad face (corners q00,q10,q11,q01 = a then b axes)
+function tuft(f, R, spoly) {
+  const q = f.pts.map(p => R ? R(p) : p);
+  const at = (a, b) => add(add(q[0], mul(sub(q[1], q[0]), a)), mul(sub(q[3], q[0]), b));
+  const P2 = (a, b) => projPoint(at(a, b));
+  const { cols, rows } = f.tuft, hA = 0.5 / cols, hB = 0.5 / rows;
+  const o = P2(0.5, 0.5); if (!o) return;
+  const ex = P2(0.5 + hA, 0.5), ey = P2(0.5, 0.5 + hB); if (!ex || !ey) return;
+  const unit = Math.hypot(ex[0] - o[0], ex[1] - o[1]);
+  const lit = clamp(dot(f.n, LIGHT) * 0.9 + 0.25);
+  const btn = [];
+  for (let j = 0; j < rows; j++) {
+    const b = (j + 0.5) / rows, even = j % 2 === 0;
+    for (let i = even ? 0 : 1; i < (even ? cols : cols); i++) btn.push([even ? (i + 0.5) / cols : i / cols, b, j]);
+  }
+  g.save(); pathS(spoly); g.clip();
+  // soft pillow highlights in the diamond centres
+  for (let j = 0; j < rows; j++) {
+    const b = (j + 0.5) / rows, even = j % 2 === 0;
+    for (let i = even ? 1 : 0; i <= cols; i++) {
+      const a = even ? i / cols : (i + 0.5) / cols;
+      if (a <= 0 || a >= 1) continue;
+      const c = P2(a, b), pa = P2(a + hA, b), pb = P2(a, b + hB); if (!c || !pa || !pb) continue;
+      g.save(); g.transform(pa[0] - c[0], pa[1] - c[1], pb[0] - c[0], pb[1] - c[1], c[0], c[1]);
+      const gr = g.createRadialGradient(-0.18, -0.2, 0, 0, 0, 1);
+      gr.addColorStop(0, `rgba(210,205,195,${0.20 * lit})`); gr.addColorStop(1, 'rgba(210,205,195,0)');
+      g.fillStyle = gr; g.beginPath(); g.arc(0, 0, 1, 0, 6.2832); g.fill(); g.restore();
+    }
+  }
+  // creases: each button to its diagonal neighbours in the next row
+  g.strokeStyle = 'rgba(0,0,0,0.55)'; g.lineWidth = Math.max(0.6, unit * 0.045); g.lineCap = 'round';
+  g.beginPath();
+  for (const [a, b, j] of btn) {
+    const p = P2(a, b); if (!p) continue;
+    for (const sd of [-1, 1]) {
+      const a2 = clamp(a + sd * hA, 0, 1), t = P2(a2, b + 2 * hB * (rows > 1 ? 1 : 0));
+      if (j + 1 < rows && t) { g.moveTo(p[0], p[1]); g.lineTo(t[0], t[1]); }
+    }
+  }
+  g.stroke();
+  // buttons
+  for (const [a, b] of btn) {
+    const p = P2(a, b); if (!p) continue;
+    const r = Math.max(1, unit * 0.07);
+    g.fillStyle = 'rgba(0,0,0,0.75)'; g.beginPath(); g.arc(p[0], p[1], r * 1.5, 0, 6.2832); g.fill();
+    g.fillStyle = rgb(mix(C.leather, C.sheen, 0.8)); g.beginPath(); g.arc(p[0], p[1], r, 0, 6.2832); g.fill();
+    g.fillStyle = `rgba(255,255,255,${0.35 * lit})`; g.beginPath(); g.arc(p[0] - r * 0.3, p[1] - r * 0.3, r * 0.3, 0, 6.2832); g.fill();
+  }
+  g.restore();
+}
+
+function drawLeaf(lf, R, eyeE) {
+  const s = projPoly(lf.pts, R); if (!s) return;
+  const ndl = Math.abs(dot(lf.n, LIGHT));
+  const col = mix(mix(C.leafBright, C.leafDeep, lf.dark), C.leafDeep, clamp(0.55 - ndl * 0.6));
+  pathS(s); g.fillStyle = rgb(col); g.fill();
+  g.strokeStyle = rgb(col); g.lineWidth = 0.5; g.stroke();
+  const a = projPoint(R ? R(lf.mid[0]) : lf.mid[0]), b = projPoint(R ? R(lf.mid[1]) : lf.mid[1]);
+  if (a && b && Math.hypot(a[0] - b[0], a[1] - b[1]) > 14) {
+    g.strokeStyle = rgb(mix(col, [230, 240, 200], 0.28), 0.7); g.lineWidth = Math.max(0.5, Math.hypot(a[0] - b[0], a[1] - b[1]) * 0.012);
+    g.beginPath(); g.moveTo(a[0], a[1]); g.lineTo(b[0], b[1]); g.stroke();
+  }
+}
+
+function drawLine(l, R) {
+  const a = projPoint(R ? R(l.a) : l.a), b = projPoint(R ? R(l.b) : l.b);
+  if (!a || !b) return;
+  const z = toCam(R ? R(l.a) : l.a)[2];
+  g.strokeStyle = rgb(l.col); g.lineWidth = Math.max(0.6, l.r * 2 * cam.F / z); g.lineCap = 'round';
+  g.beginPath(); g.moveTo(a[0], a[1]); g.lineTo(b[0], b[1]); g.stroke();
+}
+
+// R = optional reflection (mirror or floor); the item order follows distance to the eye
+function drawObject(o, R, eyeE) {
+  const items = [], dist = p => len(sub(R ? R(p) : p, cam.eye));
+  for (const s of o.solids) items.push({ k: dist(s.c), d: () => s.faces.forEach(f => drawFace(f, R, eyeE)) });
+  for (const l of o.leaves || []) items.push({ k: dist(l.c), d: () => drawLeaf(l, R, eyeE) });
+  for (const l of o.lines || []) items.push({ k: dist(l.a) + 0.05, d: () => drawLine(l, R) });
+  items.sort((a, b) => b.k - a.k).forEach(i => i.d());
+}
+function drawObjects(R, eyeE, onlyReflective) {
+  const list = scene.objects.filter(o => !onlyReflective || o.reflect);
+  list.sort((a, b) => len(sub(R ? R(b.anchor) : b.anchor, cam.eye)) - len(sub(R ? R(a.anchor) : a.anchor, cam.eye)));
+  for (const o of list) drawObject(o, R, eyeE);
+}
+
+/* ---------- room ---------- */
+function drawRoom() {
+  const wallGrad = (pts, c0, c1) => {
+    const s = projPoly(pts); if (!s) return;
+    const x0 = Math.min(...s.map(p => p[0])), x1 = Math.max(...s.map(p => p[0]));
+    const gr = g.createLinearGradient(x0, 0, x1, 0); gr.addColorStop(0, rgb(c0)); gr.addColorStop(1, rgb(c1));
+    pathS(s); g.fillStyle = gr; g.fill();
+  };
+  g.fillStyle = rgb(C.oxford); g.fillRect(0, 0, W, H);
+  wallGrad([[WALL_L, 3.6, BACK_Z], [WALL_R, 3.6, BACK_Z], [WALL_R, 0, BACK_Z], [WALL_L, 0, BACK_Z]], mix(C.wall, [255, 246, 232], 0.25), mix(C.wall, C.wallDark, 0.55));
+  wallGrad([[WALL_L, CEIL, -3.4], [WALL_L, CEIL, BACK_Z], [WALL_L, 0, BACK_Z], [WALL_L, 0, -3.4]], C.wallDark, mix(C.wall, C.wallDark, 0.5));
+  wallGrad([[WALL_R, CEIL, BACK_Z], [WALL_R, CEIL, -3.4], [WALL_R, 0, -3.4], [WALL_R, 0, BACK_Z]], mix(C.wall, C.wallDark, 0.6), C.wallDark);
+  fillWorld([[WALL_L, CEIL, -3.4], [WALL_R, CEIL, -3.4], [WALL_R, CEIL, BACK_Z], [WALL_L, CEIL, BACK_Z]], rgb(mix(C.wall, C.wallDark, 0.4)));
+  // soft light wash from the front-left on the back wall
+  const lc = projPoint([-1.6, 1.8, BACK_Z]);
+  if (lc) {
+    const r = cam.F * 2.1 / Math.max(0.5, toCam([-1.6, 1.8, BACK_Z])[2]) * 1.6;
+    const gr = g.createRadialGradient(lc[0], lc[1], 0, lc[0], lc[1], r);
+    gr.addColorStop(0, 'rgba(255,244,228,0.30)'); gr.addColorStop(1, 'rgba(255,244,228,0)');
+    const s = projPoly([[WALL_L, 3.6, BACK_Z], [WALL_R, 3.6, BACK_Z], [WALL_R, 0, BACK_Z], [WALL_L, 0, BACK_Z]]);
+    if (s) { pathS(s); g.fillStyle = gr; g.fill(); }
+  }
+  // skirting
+  const sk = C.offwhite;
+  fillWorld([[WALL_L, 0, BACK_Z], [WALL_R, 0, BACK_Z], [WALL_R, 0.12, BACK_Z], [WALL_L, 0.12, BACK_Z]], rgb(mix(C.wall, sk, 0.5)));
+  fillWorld([[WALL_L, 0.115, BACK_Z], [WALL_R, 0.115, BACK_Z], [WALL_R, 0.125, BACK_Z], [WALL_L, 0.125, BACK_Z]], 'rgba(255,255,255,0.5)');
+  fillWorld([[WALL_L, 0, -3.4], [WALL_L, 0, BACK_Z], [WALL_L, 0.12, BACK_Z], [WALL_L, 0.12, -3.4]], rgb(mix(C.wallDark, sk, 0.3)));
+  fillWorld([[WALL_R, 0, BACK_Z], [WALL_R, 0, -3.4], [WALL_R, 0.12, -3.4], [WALL_R, 0.12, BACK_Z]], rgb(mix(C.wallDark, sk, 0.3)));
+  drawMap();
+}
+
+// local plane helper: p(a,b) -> screen
+function planeMap(o, ua, vb) { return (a, b) => projPoint(add(add(o, mul(ua, a)), mul(vb, b))); }
+function polyAB(m, pts) { const s = pts.map(p => m(p[0], p[1])); if (s.some(p => !p)) return null; pathS(s); return s; }
+
+function drawMap() {
+  const x0 = 3.0, x1 = 3.62, y0 = 1.1, y1 = 1.98, z = BACK_Z - 0.01;
+  const m = planeMap([x0, y0, z], [x1 - x0, 0, 0], [0, y1 - y0, 0]);
+  // soft shadow, black frame, off-white mat, black map
+  g.fillStyle = 'rgba(40,30,20,0.12)'; polyAB(m, [[0.02, -0.02], [1.04, -0.02], [1.04, 0.98], [0.02, 0.98]]); g.fill();
+  g.fillStyle = rgb(C.oxford); polyAB(m, [[0, 0], [1, 0], [1, 1], [0, 1]]); g.fill();
+  g.fillStyle = rgb(C.offwhite); polyAB(m, [[0.045, 0.035], [0.955, 0.035], [0.955, 0.965], [0.045, 0.965]]); g.fill();
+  g.fillStyle = '#161514'; polyAB(m, [[0.12, 0.2], [0.88, 0.2], [0.88, 0.9], [0.12, 0.9]]); g.fill();
+  g.save(); polyAB(m, [[0.12, 0.2], [0.88, 0.2], [0.88, 0.9], [0.12, 0.9]]); g.clip();
+  const rng = mulberry32(21);
+  g.strokeStyle = 'rgba(232,232,232,0.5)'; g.lineWidth = 0.6;
+  for (let i = 0; i < 46; i++) {              // street-grid scribble
+    let a = rng(), b = 0.2 + rng() * 0.7, ang = Math.floor(rng() * 6) * 0.52 + 0.2, l = 0.12 + rng() * 0.35;
+    const p = m(a, b), q = m(a + Math.cos(ang) * l * 0.5, b + Math.sin(ang) * l * 0.4);
+    if (p && q) { g.beginPath(); g.moveTo(p[0], p[1]); g.lineTo(q[0], q[1]); g.stroke(); }
+  }
+  g.strokeStyle = 'rgba(232,232,232,0.9)'; g.lineWidth = 1.2; g.beginPath();   // river
+  for (let i = 0; i <= 20; i++) { const p = m(0.3 + 0.1 * Math.sin(i * 0.5) + i * 0.012, 0.2 + i * 0.035); if (p) i ? g.lineTo(p[0], p[1]) : g.moveTo(p[0], p[1]); }
+  g.stroke(); g.restore();
+  g.fillStyle = rgb(C.oxford);                 // caption bars
+  polyAB(m, [[0.34, 0.095], [0.66, 0.095], [0.66, 0.12], [0.34, 0.12]]); g.fill();
+}
+
+function drawMirror(mi) {
+  const { x0, x1, y0, y1, fr, z } = mi;
+  const m = planeMap([x0, y0, z], [x1 - x0, 0, 0], [0, y1 - y0, 0]);
+  // wall shadow and black frame
+  g.fillStyle = 'rgba(40,30,20,0.12)';
+  fillWorld([[x0 + 0.04, y0 - 0.04, z + 0.01], [x1 + 0.05, y0 - 0.04, z + 0.01], [x1 + 0.05, y1 - 0.03, z + 0.01], [x0 + 0.04, y1 - 0.03, z + 0.01]], 'rgba(40,30,20,0.12)');
+  fillWorld([[x0 - fr, y0 - fr, z + 0.005], [x1 + fr, y0 - fr, z + 0.005], [x1 + fr, y1 + fr, z + 0.005], [x0 - fr, y1 + fr, z + 0.005]], rgb(C.oxford));
+  const s = projPoly(mi.glass); if (!s) return;
+  g.save(); pathS(s); g.clip();
+  const ys = s.map(p => p[1]), gr = g.createLinearGradient(0, Math.min(...ys), 0, Math.max(...ys));
+  gr.addColorStop(0, '#d9d3cb'); gr.addColorStop(0.7, '#c5bdb4'); gr.addColorStop(1, '#a89c90');
+  g.fillStyle = gr; g.fillRect(0, 0, W, H);
+  if (mi.door) {                                // dark walnut door seen in the reflection
+    g.fillStyle = rgb(C.walnut, 0.6); polyAB(m, [[0.5, 0.0], [0.95, 0.0], [0.95, 0.66], [0.5, 0.66]]); g.fill();
+  }
+  // reflected scene: mirror plane is z = BACK_Z - 0.02
+  const zm = z, RM = p => [p[0], p[1], 2 * zm - p[2]], eyeR = RM(cam.eye);
+  g.save();
+  drawFloor(RM, mi);
+  g.restore();
+  tmpCtx.setTransform(DPR, 0, 0, DPR, 0, 0); tmpCtx.clearRect(0, 0, W, H);
+  g = tmpCtx; drawObjects(RM, eyeR, true); g = mainCtx;
+  g.globalAlpha = 0.62; g.setTransform(1, 0, 0, 1, 0, 0); g.drawImage(tmp, 0, 0); g.setTransform(DPR, 0, 0, DPR, 0, 0); g.globalAlpha = 1;
+  g.fillStyle = 'rgba(255,250,244,0.14)'; g.fillRect(0, 0, W, H);       // glass veil
+  const sx = s.map(p => p[0]), bx0 = Math.min(...sx), bx1 = Math.max(...sx), w = bx1 - bx0;
+  g.fillStyle = 'rgba(255,255,255,0.10)';                                // diagonal sheen bands
+  for (const [o, wd] of [[0.2, 0.12], [0.5, 0.05]]) {
+    g.beginPath(); g.moveTo(bx0 + w * o, 0); g.lineTo(bx0 + w * (o + wd), 0);
+    g.lineTo(bx0 + w * (o + wd) - H * 0.5, H); g.lineTo(bx0 + w * o - H * 0.5, H); g.fill();
+  }
+  g.restore();
+}
+
+/* ---------- floor ---------- */
+function drawFloor(R, mirror) {
+  const fs = projPoly(scene.floorPoly, R); if (!fs) return;
+  g.save(); pathS(fs); g.clip();
+  g.fillStyle = rgb(C.walnut); g.fillRect(0, 0, W, H);
+  const gap = Math.max(0.5, cam.F / 1250 * 0.9);
+  for (const pl of scene.planks) {
+    if (mirror && (pl.c[0] < mirror.x0 - 0.3 || pl.c[0] > mirror.x1 + 0.3)) continue;
+    const s = projPoly(pl.p, R); if (!s) continue;
+    pathS(s); g.fillStyle = rgb(pl.col); g.fill();
+    const sz = Math.hypot(s[0][0] - s[2][0], s[0][1] - s[2][1]);
+    if (sz > 5) {
+      g.strokeStyle = 'rgba(38,14,8,0.5)'; g.lineWidth = gap; g.stroke();
+      if (sz > 28 && pl.h > 0.3 && s.length === 4) {              // faint grain streaks along the plank
+        const e0 = pl.along === 'u' ? [0, 3] : [1, 0], e1 = pl.along === 'u' ? [1, 2] : [2, 3];
+        for (const t of [0.3, 0.66]) {
+          g.strokeStyle = `rgba(40,14,8,${0.1 + pl.h * 0.16})`; g.lineWidth = 0.6;
+          g.beginPath();
+          g.moveTo(lerp(s[e0[0]][0], s[e1[0]][0], t), lerp(s[e0[0]][1], s[e1[0]][1], t));
+          g.lineTo(lerp(s[e0[1]][0], s[e1[1]][0], t), lerp(s[e0[1]][1], s[e1[1]][1], t));
+          g.stroke();
+        }
+      }
+    }
+  }
+  if (!R) return g.restore();
+  g.restore();
+}
+
+function drawFloorGloss() {
+  const fs = projPoly(scene.floorPoly); if (!fs) return;
+  g.save(); pathS(fs); g.clip();
+  const yh = projPoint([0, 0, BACK_Z]);
+  const top = yh ? yh[1] : H * 0.45;
+  // glossy sheen: bright near the wall, pooling in front-left, darker at the bottom corners
+  const gr = g.createLinearGradient(0, top, 0, H);
+  gr.addColorStop(0, 'rgba(255,214,170,0.22)'); gr.addColorStop(0.35, 'rgba(255,190,140,0.04)'); gr.addColorStop(1, 'rgba(20,6,2,0.28)');
+  g.fillStyle = gr; g.fillRect(0, 0, W, H);
+  const pc = projPoint([-1.2, 0, 0.6]);
+  if (pc) {
+    const gr2 = g.createRadialGradient(pc[0], pc[1], 0, pc[0], pc[1], H * 0.6);
+    gr2.addColorStop(0, 'rgba(255,205,160,0.20)'); gr2.addColorStop(1, 'rgba(255,205,160,0)');
+    g.fillStyle = gr2; g.fillRect(0, 0, W, H);
+  }
+  g.restore();
+}
+
+function drawFloorReflections() {
+  const fs = projPoly(scene.floorPoly); if (!fs) return;
+  const RF = p => [p[0], -p[1], p[2]], eyeR = RF(cam.eye);
+  tmpCtx.setTransform(DPR, 0, 0, DPR, 0, 0); tmpCtx.clearRect(0, 0, W, H);
+  g = tmpCtx; drawObjects(RF, eyeR, true); g = mainCtx;
+  g.save(); pathS(fs); g.clip(); g.globalAlpha = 0.24;
+  g.setTransform(1, 0, 0, 1, 0, 0); g.drawImage(tmp, 0, 0); g.setTransform(DPR, 0, 0, DPR, 0, 0);
+  g.restore();
+  // mirrors reflect on the floor too: a pale vertical glint under each mirror
+  for (const mi of scene.mirrors) {
+    const s = projPoly([[mi.x0, 0, BACK_Z - 0.3], [mi.x1, 0, BACK_Z - 0.3], [mi.x1, 0, BACK_Z], [mi.x0, 0, BACK_Z]]);
+    if (!s) continue;
+    g.save(); pathS(fs); g.clip(); pathS(s); g.fillStyle = 'rgba(235,215,190,0.16)'; g.fill(); g.restore();
+  }
+}
+
+function drawShadows() {
+  for (const o of scene.objects) {
+    const sh = o.shadow; if (!sh) continue;
+    for (let i = 0; i < 5; i++) {
+      const k = 1 - i * 0.16, pts = [];
+      for (let j = 0; j < 28; j++) { const a = j / 28 * Math.PI * 2; pts.push([sh.x + Math.cos(a) * sh.rx * k, 0, sh.z + Math.sin(a) * sh.rz * k]); }
+      fillWorld(pts, `rgba(20,6,2,${sh.a / 4})`);
+    }
+  }
+}
+
+/* ---------- finishing ---------- */
+let grainPattern;
+function makeGrain() {
+  const n = Math.round(160 * DPR), cvs = document.createElement('canvas'); cvs.width = cvs.height = n;
+  const c = cvs.getContext('2d'), im = c.createImageData(n, n);
+  for (let i = 0; i < n * n; i++) {
+    const v = hash(i, 9, 4) * 255, a = 255 * 0.5;
+    im.data[i * 4] = v; im.data[i * 4 + 1] = v; im.data[i * 4 + 2] = v; im.data[i * 4 + 3] = a;
+  }
+  c.putImageData(im, 0, 0);
+  grainPattern = mainCtx.createPattern(cvs, 'repeat');
+  grainPattern.setTransform(new DOMMatrix().scale(1 / DPR));
+}
+function finish() {
+  const vg = g.createRadialGradient(W / 2, H * 0.48, Math.min(W, H) * 0.35, W / 2, H * 0.5, Math.hypot(W, H) * 0.62);
+  vg.addColorStop(0, 'rgba(26,25,24,0)'); vg.addColorStop(1, 'rgba(26,25,24,0.55)');
+  g.fillStyle = vg; g.fillRect(0, 0, W, H);
+  const wg = g.createRadialGradient(W * 0.2, H * 0.1, 0, W * 0.2, H * 0.1, Math.hypot(W, H) * 0.7);   // front-left warmth
+  wg.addColorStop(0, 'rgba(255,236,205,0.10)'); wg.addColorStop(1, 'rgba(255,236,205,0)');
+  g.fillStyle = wg; g.fillRect(0, 0, W, H);
+  g.globalAlpha = 0.07; g.fillStyle = grainPattern; g.fillRect(0, 0, W, H); g.globalAlpha = 1;
+}
+
+/* ---------- render: pure function of time ---------- */
+function render(t) {
+  t = clamp(t, 0, DUR);
+  cam = makeCamera(t);
+  g = mainCtx; g.setTransform(DPR, 0, 0, DPR, 0, 0);
+  drawRoom();
+  scene.mirrors.forEach(drawMirror);
+  drawFloor(null);
+  drawFloorGloss();
+  drawFloorReflections();
+  drawShadows();
+  drawObjects(null, cam.eye, false);
+  finish();
+}
+
+makeGrain();
+if (FROZEN_T !== null) render(FROZEN_T);
+else {
+  const t0 = performance.now();
+  const tick = now => { render((now - t0) / 1000); requestAnimationFrame(tick); };   // holds on the last frame after 16 s
+  requestAnimationFrame(tick);
+}
+window.seek = render;                  // render(t) for scrubbing from the console
+})();
+</script>
+</body>
+</html>
