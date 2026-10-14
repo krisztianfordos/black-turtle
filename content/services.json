@@ -1,0 +1,212 @@
+[
+ {
+  "level": "JUNIOR STYLIST",
+  "name": "Basic hajvágás",
+  "price": "7000",
+  "duration": "40 perc",
+  "desc": "NEM SKINFADE hajvágás, klasszikus és letisztult fazonok készítésére szolgál. A szolgáltatás egy rövid konzultációval kezdődik, ahol a borbély a vendég igényeihez igazítja a kívánt stílust. A hajvágás után a finish a vendég által választott prémium termékkel történik a tökéletes megjelenés érdekében."
+ },
+ {
+  "level": "JUNIOR STYLIST",
+  "name": "Basic hajvágás & szakáll igazítás",
+  "price": "10000",
+  "duration": "1 óra 10 perc",
+  "desc": "NEM SKINFADE, klasszikus hajvágást és precíz szakállformázást tartalmaz. A kezelés konzultációval kezdődik, ahol a borbély a vendég stílusához igazítja a haj és szakáll végső megjelenését. A szolgáltatás finisheléssel zárul, a vendég által választott prémium haj- és szakállápoló termékek használatával."
+ },
+ {
+  "level": "JUNIOR STYLIST",
+  "name": "Gépi egy hossz hajvágás",
+  "price": "4000",
+  "duration": "20 perc",
+  "desc": "Az egyhossz gépi hajvágás kizárólag géppel készül, a haj teljes felületén egységes hossz kialakításával. A szolgáltatás egy rövid konzultációval indul, ahol a vendég kiválasztja a kívánt méretet és megjelenést. A hajvágást finishelés zárja, a vendég által választott styling termékkel a letisztult végeredményért."
+ },
+ {
+  "level": "JUNIOR STYLIST",
+  "name": "Gépi egy hossz hajvágás & szakáll igazítás",
+  "price": "7500",
+  "duration": "45 perc",
+  "desc": "Az egyhossz gépi hajvágás és szakáll igazítás szolgáltatás teljesen géppel egy méretre történő hajvágást és precíz szakállformázást tartalmaz az egységes, letisztult megjelenésért. A kezelés rövid konzultációval kezdődik, ahol a borbély a vendég igényeihez igazítja a kívánt haj- és szakállstílust. A szolgáltatás finisheléssel zárul, prémium haj- és szakállápoló termékek használatával a tökéletes végeredményért."
+ },
+ {
+  "level": "JUNIOR STYLIST",
+  "name": "Gyerek hajvágás",
+  "price": "6000",
+  "duration": "40 perc",
+  "desc": "A gyerek hajvágás szolgáltatás 12 éves korig vehető igénybe, barátságos és türelmes környezetben. A hajvágás előtt rövid konzultáció történik a szülő és a gyermek igényei alapján a kívánt stílus kialakításához. A frizura finishelése a gyermek számára megfelelő styling termékkel történik a rendezett megjelenésért."
+ },
+ {
+  "level": "JUNIOR STYLIST",
+  "name": "Hosszú hajvágás",
+  "price": "8000",
+  "duration": "1 óra",
+  "desc": "A hosszú haj vágás kizárólag ollós technikával készül, a természetes forma és textúra megőrzésére fókuszálva. A szolgáltatás konzultációval kezdődik, ahol a borbély a vendég elképzeléseihez és hajtípusához igazítja a kívánt fazont. A vágást finishelés zárja, a vendég által választott prémium termékkel a rendezett és stílusos megjelenésért."
+ },
+ {
+  "level": "JUNIOR STYLIST",
+  "name": "Hosszú hajvágás & szakáll igazítás",
+  "price": "11000",
+  "duration": "1 óra 30 perc",
+  "desc": "A hosszú haj vágás és szakáll igazítás szolgáltatás kizárólag ollós hajvágást és precíz szakállformázást tartalmaz a természetes, ápolt megjelenésért. A kezelés konzultációval kezdődik, ahol a borbély a vendég hajtípusához, arcformájához és stílusához igazítja a kívánt fazont. A szolgáltatás finisheléssel zárul, prémium haj- és szakállápoló termékek használatával a tökéletes végeredményért."
+ },
+ {
+  "level": "JUNIOR STYLIST",
+  "name": "Skinfade hajvágás",
+  "price": "8000",
+  "duration": "1 óra",
+  "desc": "A Skinfade hajvágás precíz átmenettel készül, ahol a haj fokozatosan a bőrig rövidül az oldalsó részeken. A szolgáltatás személyes konzultációval indul, hogy a végeredmény tökéletesen illeszkedjen a vendég stílusához és arcformájához. A hajvágást finishelés zárja, a vendég által választott prémium styling termékkel a maximális megjelenésért."
+ },
+ {
+  "level": "JUNIOR STYLIST",
+  "name": "Skinfade hajvágás & szakáll igazítás",
+  "price": "11000",
+  "duration": "1 óra 30 perc",
+  "desc": "A skinfade és szakáll igazítás szolgáltatás precíz bőrig átmenetes hajvágást és részletes szakállformázást tartalmaz a modern megjelenésért. A szolgáltatás konzultációval kezdődik, ahol a borbély a vendég stílusához és arcformájához igazítja a haj és szakáll végső formáját. A szolgáltatás finisheléssel zárul, prémium haj- és szakállápoló termékek használatával a tökéletes végeredményért."
+ },
+ {
+  "level": "JUNIOR STYLIST",
+  "name": "Szakáll igazítás",
+  "price": "5000",
+  "duration": "30 perc",
+  "desc": "A szakáll igazítás során a szakáll formázása precíz kontúrok kialakításával és borotválással történik az ápolt megjelenés érdekében. A szolgáltatás rövid konzultációval kezdődik, ahol a borbély a vendég arcformájához és stílusához igazítja a kívánt formát. A kezelés finisheléssel zárul, prémium szakállápoló termékek használatával a tökéletes végeredményért."
+ },
+ {
+  "level": "SENIOR STYLIST",
+  "name": "Basic hajvágás",
+  "price": "8000",
+  "duration": "30 perc",
+  "desc": "NEM SKINFADE hajvágás, klasszikus és letisztult fazonok készítésére szolgál. A szolgáltatás egy rövid konzultációval kezdődik, ahol a borbély a vendég igényeihez igazítja a kívánt stílust. A hajvágás után a finish a vendég által választott prémium termékkel történik a tökéletes megjelenés érdekében."
+ },
+ {
+  "level": "SENIOR STYLIST",
+  "name": "Basic hajvágás & szakáll igazítás",
+  "price": "12000",
+  "duration": "1 óra",
+  "desc": "NEM SKINFADE, klasszikus hajvágást és precíz szakállformázást tartalmaz. A kezelés konzultációval kezdődik, ahol a borbély a vendég stílusához igazítja a haj és szakáll végső megjelenését. A szolgáltatás finisheléssel zárul, a vendég által választott prémium haj- és szakállápoló termékek használatával."
+ },
+ {
+  "level": "SENIOR STYLIST",
+  "name": "Gépi egy hossz hajvágás",
+  "price": "5000",
+  "duration": "20 perc",
+  "desc": "Az egyhossz gépi hajvágás kizárólag géppel készül, a haj teljes felületén egységes hossz kialakításával. A szolgáltatás egy rövid konzultációval indul, ahol a vendég kiválasztja a kívánt méretet és megjelenést. A hajvágást finishelés zárja, a vendég által választott styling termékkel a letisztult végeredményért."
+ },
+ {
+  "level": "SENIOR STYLIST",
+  "name": "Gépi egy hossz hajvágás & szakáll igazítás",
+  "price": "8500",
+  "duration": "45 perc",
+  "desc": "Az egyhossz gépi hajvágás és szakáll igazítás szolgáltatás teljesen géppel egy méretre történő hajvágást és precíz szakállformázást tartalmaz az egységes, letisztult megjelenésért. A kezelés rövid konzultációval kezdődik, ahol a borbély a vendég igényeihez igazítja a kívánt haj- és szakállstílust. A szolgáltatás finisheléssel zárul, prémium haj- és szakállápoló termékek használatával a tökéletes végeredményért."
+ },
+ {
+  "level": "SENIOR STYLIST",
+  "name": "Gyerek hajvágás",
+  "price": "7000",
+  "duration": "30 perc",
+  "desc": "A gyerek hajvágás szolgáltatás 12 éves korig vehető igénybe, barátságos és türelmes környezetben. A hajvágás előtt rövid konzultáció történik a szülő és a gyermek igényei alapján a kívánt stílus kialakításához. A frizura finishelése a gyermek számára megfelelő styling termékkel történik a rendezett megjelenésért."
+ },
+ {
+  "level": "SENIOR STYLIST",
+  "name": "Hosszú hajvágás",
+  "price": "10000",
+  "duration": "1 óra",
+  "desc": "A hosszú haj vágás kizárólag ollós technikával készül, a természetes forma és textúra megőrzésére fókuszálva. A szolgáltatás konzultációval kezdődik, ahol a borbély a vendég elképzeléseihez és hajtípusához igazítja a kívánt fazont. A vágást finishelés zárja, a vendég által választott prémium termékkel a rendezett és stílusos megjelenésért."
+ },
+ {
+  "level": "SENIOR STYLIST",
+  "name": "Hosszú hajvágás & szakáll igazítás",
+  "price": "14000",
+  "duration": "1 óra 30 perc",
+  "desc": "A hosszú haj vágás és szakáll igazítás szolgáltatás kizárólag ollós hajvágást és precíz szakállformázást tartalmaz a természetes, ápolt megjelenésért. A kezelés konzultációval kezdődik, ahol a borbély a vendég hajtípusához, arcformájához és stílusához igazítja a kívánt fazont. A szolgáltatás finisheléssel zárul, prémium haj- és szakállápoló termékek használatával a tökéletes végeredményért."
+ },
+ {
+  "level": "SENIOR STYLIST",
+  "name": "Skinfade hajvágás",
+  "price": "10000",
+  "duration": "1 óra",
+  "desc": "A Skinfade hajvágás precíz átmenettel készül, ahol a haj fokozatosan a bőrig rövidül az oldalsó részeken. A szolgáltatás személyes konzultációval indul, hogy a végeredmény tökéletesen illeszkedjen a vendég stílusához és arcformájához. A hajvágást finishelés zárja, a vendég által választott prémium styling termékkel a maximális megjelenésért."
+ },
+ {
+  "level": "SENIOR STYLIST",
+  "name": "Skinfade hajvágás & szakáll igazítás",
+  "price": "14000",
+  "duration": "1 óra 30 perc",
+  "desc": "A skinfade és szakáll igazítás szolgáltatás precíz bőrig átmenetes hajvágást és részletes szakállformázást tartalmaz a modern megjelenésért. A szolgáltatás konzultációval kezdődik, ahol a borbély a vendég stílusához és arcformájához igazítja a haj és szakáll végső formáját. A szolgáltatás finisheléssel zárul, prémium haj- és szakállápoló termékek használatával a tökéletes végeredményért."
+ },
+ {
+  "level": "SENIOR STYLIST",
+  "name": "Szakáll igazítás",
+  "price": "6000",
+  "duration": "30 perc",
+  "desc": "A szakáll igazítás során a szakáll formázása precíz kontúrok kialakításával és borotválással történik az ápolt megjelenés érdekében. A szolgáltatás rövid konzultációval kezdődik, ahol a borbély a vendég arcformájához és stílusához igazítja a kívánt formát. A kezelés finisheléssel zárul, prémium szakállápoló termékek használatával a tökéletes végeredményért."
+ },
+ {
+  "level": "STYLIST",
+  "name": "Basic hajvágás",
+  "price": "7500",
+  "duration": "40 perc",
+  "desc": "NEM SKINFADE hajvágás, klasszikus és letisztult fazonok készítésére szolgál. A szolgáltatás egy rövid konzultációval kezdődik, ahol a borbély a vendég igényeihez igazítja a kívánt stílust. A hajvágás után a finish a vendég által választott prémium termékkel történik a tökéletes megjelenés érdekében."
+ },
+ {
+  "level": "STYLIST",
+  "name": "Basic hajvágás & szakáll igazítás",
+  "price": "11000",
+  "duration": "1 óra 10 perc",
+  "desc": "NEM SKINFADE, klasszikus hajvágást és precíz szakállformázást tartalmaz. A kezelés konzultációval kezdődik, ahol a borbély a vendég stílusához igazítja a haj és szakáll végső megjelenését. A szolgáltatás finisheléssel zárul, a vendég által választott prémium haj- és szakállápoló termékek használatával."
+ },
+ {
+  "level": "STYLIST",
+  "name": "Gépi egy hossz hájvágás",
+  "price": "4500",
+  "duration": "20 perc",
+  "desc": "Az egyhossz gépi hajvágás kizárólag géppel készül, a haj teljes felületén egységes hossz kialakításával. A szolgáltatás egy rövid konzultációval indul, ahol a vendég kiválasztja a kívánt méretet és megjelenést. A hajvágást finishelés zárja, a vendég által választott styling termékkel a letisztult végeredményért."
+ },
+ {
+  "level": "STYLIST",
+  "name": "Gépi egy hossz hajvágás & szakáll igazítás",
+  "price": "8000",
+  "duration": "45 perc",
+  "desc": "Az egyhossz gépi hajvágás és szakáll igazítás szolgáltatás teljesen géppel egy méretre történő hajvágást és precíz szakállformázást tartalmaz az egységes, letisztult megjelenésért. A kezelés rövid konzultációval kezdődik, ahol a borbély a vendég igényeihez igazítja a kívánt haj- és szakállstílust. A szolgáltatás finisheléssel zárul, prémium haj- és szakállápoló termékek használatával a tökéletes végeredményért."
+ },
+ {
+  "level": "STYLIST",
+  "name": "Gyerek hajvágás",
+  "price": "6500",
+  "duration": "40 perc",
+  "desc": "A gyerek hajvágás szolgáltatás 12 éves korig vehető igénybe, barátságos és türelmes környezetben. A hajvágás előtt rövid konzultáció történik a szülő és a gyermek igényei alapján a kívánt stílus kialakításához. A frizura finishelése a gyermek számára megfelelő styling termékkel történik a rendezett megjelenésért."
+ },
+ {
+  "level": "STYLIST",
+  "name": "Hosszú hajvágás",
+  "price": "9000",
+  "duration": "1 óra",
+  "desc": "A hosszú haj vágás kizárólag ollós technikával készül, a természetes forma és textúra megőrzésére fókuszálva. A szolgáltatás konzultációval kezdődik, ahol a borbély a vendég elképzeléseihez és hajtípusához igazítja a kívánt fazont. A vágást finishelés zárja, a vendég által választott prémium termékkel a rendezett és stílusos megjelenésért."
+ },
+ {
+  "level": "STYLIST",
+  "name": "Hosszú hajvágás & szakáll igazítás",
+  "price": "12500",
+  "duration": "1 óra 30 perc",
+  "desc": "A hosszú haj vágás és szakáll igazítás szolgáltatás kizárólag ollós hajvágást és precíz szakállformázást tartalmaz a természetes, ápolt megjelenésért. A kezelés konzultációval kezdődik, ahol a borbély a vendég hajtípusához, arcformájához és stílusához igazítja a kívánt fazont. A szolgáltatás finisheléssel zárul, prémium haj- és szakállápoló termékek használatával a tökéletes végeredményért."
+ },
+ {
+  "level": "STYLIST",
+  "name": "Skinfade hajvágás",
+  "price": "9000",
+  "duration": "1 óra",
+  "desc": "A Skinfade hajvágás precíz átmenettel készül, ahol a haj fokozatosan a bőrig rövidül az oldalsó részeken. A szolgáltatás személyes konzultációval indul, hogy a végeredmény tökéletesen illeszkedjen a vendég stílusához és arcformájához. A hajvágást finishelés zárja, a vendég által választott prémium styling termékkel a maximális megjelenésért."
+ },
+ {
+  "level": "STYLIST",
+  "name": "Skinfade hajvágás & szakáll igazítás",
+  "price": "12500",
+  "duration": "1 óra 30 perc",
+  "desc": "A skinfade és szakáll igazítás szolgáltatás precíz bőrig átmenetes hajvágást és részletes szakállformázást tartalmaz a modern megjelenésért. A szolgáltatás konzultációval kezdődik, ahol a borbély a vendég stílusához és arcformájához igazítja a haj és szakáll végső formáját. A szolgáltatás finisheléssel zárul, prémium haj- és szakállápoló termékek használatával a tökéletes végeredményért."
+ },
+ {
+  "level": "STYLIST",
+  "name": "Szakáll igazítás",
+  "price": "5500",
+  "duration": "30 perc",
+  "desc": "A szakáll igazítás során a szakáll formázása precíz kontúrok kialakításával és borotválással történik az ápolt megjelenés érdekében. A szolgáltatás rövid konzultációval kezdődik, ahol a borbély a vendég arcformájához és stílusához igazítja a kívánt formát. A kezelés finisheléssel zárul, prémium szakállápoló termékek használatával a tökéletes végeredményért."
+ }
+]
